@@ -1,0 +1,3 @@
+﻿  kagerou-screenshot.cpp
+F:\code\ff14\kagerou-screenshot\kagerou-screenshot\kagerou-screenshot.cpp(14): warning C4715: 'message_on_false': not all control paths return a value
+  kagerou-screenshot.vcxproj -> F:\code\ff14\kagerou-screenshot\Debug\kagerou-screenshot.exe
