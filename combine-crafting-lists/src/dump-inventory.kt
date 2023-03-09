@@ -3,12 +3,14 @@ package sub
 import Ingredient
 import java.io.File
 import Recipe
+import java.lang.Integer.min
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 data class Entry(
     val name: String,
     var current: Int,
     var total: Int,
-    var isIshOnly: Boolean,
     val isCraft: Boolean,
     val source: String,
     val recipe: String?,
@@ -38,15 +40,14 @@ fun parseCraftingList(craftingList: File): List<Entry> {
         .map { (s,match) ->
             match!!
             val name = match.groupValues[1].toLowerCase()
-            val isIshOnly = match.groupValues[2] == "ISH"
-            val current = if (isIshOnly) 0 else match.groupValues[3].toInt()
-            val total = if (isIshOnly) 0 else match.groupValues[4].toInt()
+            val current = match.groupValues[3].toInt()
+            val total = match.groupValues[4].toInt()
             val isCraft = match.groupValues[7] == "craft"
             val source = match.groupValues[6]
             val recipe = match.groups[9]?.value
             val tags = match.groupValues[10]
 
-            Entry(name, current, total, isIshOnly, isCraft, source, recipe, tags)
+            Entry(name, current, total, isCraft, source, recipe, tags)
         }
 }
 
@@ -86,7 +87,9 @@ fun main() {
 
     if (noRecipes.any()) {
         println("\nMissing recipes:")
-        noRecipes.distinct().forEach(::println)
+        noRecipes.distinct().forEach {
+            println("https://ffxiv.gamerescape.com/wiki/Special:Search/${URLEncoder.encode(it, StandardCharsets.UTF_8.toString()).replace("+", "%20")}")
+        }
         return
     }
 
@@ -111,12 +114,14 @@ fun main() {
         val sourced = addedQuanities.sourced.entries.filter { it.key.first == name }
 
         val (prevCurrent, prevTotal) = prevQuantities[name] ?: Pair(0, 0)
+        if (prevCurrent + totalIncrease == prevTotal) return@forEach
+
         println("$name ($prevCurrent/$prevTotal -> ${prevCurrent + totalIncrease}/$prevTotal, ${prevCurrent + totalIncrease - prevTotal} excess): ${
             sourced.sortedWith(compareBy({it.key.second != null}, {-it.value})).joinToString(", ") { "${it.value} [${it.key.second?.let { "$it" } ?: "direct" }]"}
         }")
     }
 
-    val output = entries.joinToString("\n", transform = Entry::format)
+    val output = entries.sortedBy { "FSH" in it.tags }.joinToString("\n", transform = Entry::format)
 //    listFile.writeText(output)
 }
 
@@ -149,28 +154,26 @@ private fun addQuantity(increase: Int, entry: Entry, entries: MutableList<Entry>
         return
     }
 
-    val cappedIncrease = /*if (entry.isCraft) min(increase, entry.total - entry.current - 1) else*/ increase
+    val cappedIncrease = if (entry.isCraft) min(increase, entry.total - entry.current/* - 1*/) else increase
 
     val prevCurrent = entry.current
     val prevTotal = entry.total
     val newQuantity = entry.current + cappedIncrease
-    val last = if (newQuantity >= entry.total) {
+    if (newQuantity >= entry.total) {
         entry.current = entry.total
 
 //        if (entry.isCraft) {
 //            entry.current = entry.total - 1
 //        }
 
-        if (entry.tags.contains("ISH")) {
-            entry.isIshOnly = true
-        } else /*if (!entry.isCraft)*/ {
+//        if (entry.tags.contains("ISH")) {
+//            entry.isIshOnly = true
+//        } else /*if (!entry.isCraft)*/ {
             entries.remove(entry)
             println("Removing entry ${entry.name}")
-        }
-        true
+//        }
     } else {
         entry.current = newQuantity
-        false
     }
 
     var newCurrent = entry.current
@@ -180,7 +183,17 @@ private fun addQuantity(increase: Int, entry: Entry, entries: MutableList<Entry>
         val recipe = recipes.find { it.name == entry.name }
         val yield = recipe!!.yield
         val origExcess = prevCurrent % `yield`
-        val recipeIncrease = (origExcess + cappedIncrease) / `yield` + if (last && entry.total % `yield` != 0) 1 else 0
+
+        // The ingredients should be deducted when product quantity (mod yield) = product total (mod yield)
+        // This is because once you get the 1, 2, etc. extra, you're done the extras. Deducting too late means one fewer craft than what should happen and leftover ingredients.
+        // Assuming a yield of 3:
+        // prev=17/20, current=18/20 -> don't touch ingredients
+        // prev=17-18/20, current=19/20 -> don't touch ingredients
+        // prev=1/20, current=2/20 -> add 1 craft to ingredients
+        // prev=2/20, current=3/20 -> don't touch ingredients
+        // prev=0/20, current=5/20 -> add 2 crafts to ingredients
+        // Overall, the answer needs to be in (mod yield), but % is a remainder not a modulus hence the `( + yield) % yield` dance.
+        val recipeIncrease = ((origExcess + `yield` - entry.total % `yield`) % `yield` + cappedIncrease) / `yield`
 
         if (recipeIncrease != 0) {
             recipe.ingredients.forEach { ing ->
@@ -197,12 +210,12 @@ private fun addQuantity(increase: Int, entry: Entry, entries: MutableList<Entry>
         }
     }
 
-    if (entry.isIshOnly) {
-        entry.current = 0
-        entry.total = 0
-        newCurrent = 0
-        newTotal = 0
-    }
+//    if (entry.isIshOnly) {
+//        entry.current = 0
+//        entry.total = 0
+//        newCurrent = 0
+//        newTotal = 0
+//    }
 
-    println("Updated entry ${entry.name} ($prevCurrent/$prevTotal) -> ($newCurrent/$newTotal). ${chain.joinToString("->")}. ISH-only? ${entry.isIshOnly}")
+    println("Updated entry ${entry.name} ($prevCurrent/$prevTotal) -> ($newCurrent/$newTotal). ${chain.joinToString("->")}")
 }

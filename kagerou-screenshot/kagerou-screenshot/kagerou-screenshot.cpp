@@ -30,6 +30,8 @@ auto create_bitmap() -> HBITMAP {
 	auto window = FindWindow(nullptr, L"kagerou");
 	GLE_AND_RETURN_ON_FALSE(window, L"FindWindow", nullptr);
 
+	MESSAGE_AND_RETURN_ON_FALSE(IsWindowVisible(window), L"kagerou visibility check", nullptr);
+
 	auto screen_dc = GetDC(nullptr);
 	MESSAGE_AND_RETURN_ON_FALSE(screen_dc, L"GetWindowDC", nullptr);
 	ScopedCleanup cleanup_dc([window, screen_dc] { ReleaseDC(window, screen_dc); });

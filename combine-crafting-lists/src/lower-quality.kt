@@ -54,7 +54,7 @@ fun lowerQuality(
     var nqEntry = entries.find { it.name == mainEntry.name.substringBeforeLast(' ') }
     if (nqEntry == null) {
         println("Adding NQ entry for ${mainEntry.name} | $quantity")
-        nqEntry = sub.Entry(mainEntry.name.substringBeforeLast(' '), 0, 0, false, mainEntry.isCraft, mainEntry.source, null, mainEntry.tags)
+        nqEntry = sub.Entry(mainEntry.name.substringBeforeLast(' '), 0, 0, mainEntry.isCraft, mainEntry.source, null, mainEntry.tags)
         entries.add(0, nqEntry)
     }
 
